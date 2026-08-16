@@ -100,10 +100,6 @@ function restoreLastActivePage() {
       loadUsers();
     } else if (lastPage === 'manageLeaves') {
       loadAllLeaves();
-    } else if (lastPage === 'rfidFace') {
-      if (typeof initAdminRFIDFace === 'function') {
-        initAdminRFIDFace();
-      }
     } else if (lastPage === 'reports') {
       setupReports();
     } else if (lastPage === 'dashboardAdmin') {
@@ -143,14 +139,10 @@ function setupAdminNavigation() {
 
       if (page === 'rfidFace') {
         e.preventDefault();
-        showContentSection('rfidFace');
         document.querySelectorAll('.navbar-menu-link').forEach(a => a.classList.remove('active'));
         link.classList.add('active');
         localStorage.setItem('activeAdminPage', 'rfidFace');
-        // Initialize RFID & Face handlers
-        if (typeof initAdminRFIDFace === 'function') {
-          initAdminRFIDFace();
-        }
+        window.location.href = 'rfid-face-register.html';
         return;
       }
 
@@ -183,7 +175,13 @@ function showContentSection(sectionId) {
   document.querySelectorAll('.content-section').forEach(section => {
     section.classList.remove('active');
   });
-  document.getElementById(sectionId).classList.add('active');
+  const section = document.getElementById(sectionId);
+  if (section) {
+    section.classList.add('active');
+  } else {
+    // Fallback to dashboard if section not found
+    document.getElementById('dashboardAdmin').classList.add('active');
+  }
 }
 
 // Load admin dashboard
