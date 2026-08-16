@@ -22,7 +22,8 @@ document.addEventListener('DOMContentLoaded', () => {
 async function loadUsers() {
   try {
     const data = await apiCall(`${API_ENDPOINTS.USERS}?limit=100&status=active`);
-    displayUsers(data.data);
+    const users = Array.isArray(data.data) ? data.data : [];
+    displayUsers(users);
   } catch (error) {
     console.error('Error loading users:', error);
     document.getElementById('usersList').innerHTML = '<p class="text-center">Error loading users</p>';
@@ -32,13 +33,14 @@ async function loadUsers() {
 // Display users grid
 function displayUsers(users) {
   const container = document.getElementById('usersList');
+  const list = Array.isArray(users) ? users : [];
   
-  if (users.length === 0) {
-    container.innerHTML = '<p class="text-center">Tidak ada pegawai</p>';
+  if (list.length === 0) {
+    container.innerHTML = '<p class="text-center">Tidak ada pegawai yang cocok</p>';
     return;
   }
   
-  container.innerHTML = users.map(user => `
+  container.innerHTML = list.map(user => `
     <div class="user-card" onclick="selectUser(${user.id})">
       <div class="user-card-avatar">
         <i class="fas fa-user-circle"></i>
@@ -60,15 +62,23 @@ function displayUsers(users) {
 function setupSearchUser() {
   const searchInput = document.getElementById('searchUser');
   searchInput.addEventListener('input', async (e) => {
-    const searchTerm = e.target.value;
+    const searchTerm = (e.target.value || '').trim();
     if (searchTerm.length < 2) {
       loadUsers();
       return;
     }
     
     try {
-      const data = await apiCall(`${API_ENDPOINTS.USERS}?search=${searchTerm}&limit=50`);
-      displayUsers(data.data);
+      const data = await apiCall(`${API_ENDPOINTS.USERS}?status=active&limit=50`);
+      const users = Array.isArray(data.data) ? data.data : [];
+      const filtered = users.filter(user => {
+        const q = searchTerm.toLowerCase();
+        const name = (user.name || '').toLowerCase();
+        const nip = (user.nip || '').toLowerCase();
+        const dept = (user.department_name || '').toLowerCase();
+        return name.includes(q) || nip.includes(q) || dept.includes(q);
+      });
+      displayUsers(filtered);
     } catch (error) {
       console.error('Error searching users:', error);
     }
@@ -114,7 +124,7 @@ function clearSelection() {
 // Load RFID & Face status
 async function loadRFIDFaceStatus(userId) {
   try {
-    const response = await apiCall(`${API_BASE_URL}/rfid-face/status/${userId}`);
+    const response = await apiCall(API_ENDPOINTS.RFID_FACE_STATUS(userId));
     const status = response.data;
     
     // RFID Status
@@ -183,7 +193,7 @@ async function registerRFID() {
   showLoading('Mendaftarkan RFID...');
   
   try {
-    await apiCall(`${API_BASE_URL}/rfid-face/rfid/register`, 'POST', {
+    await apiCall(API_ENDPOINTS.RFID_REGISTER, 'POST', {
       userId: selectedUserId,
       rfidUid: rfidUid
     });
@@ -208,7 +218,7 @@ async function testRFID() {
   showLoading('Testing RFID...');
   
   try {
-    const response = await apiCall(`${API_BASE_URL}/rfid-face/rfid/verify`, 'POST', {
+    const response = await apiCall(API_ENDPOINTS.RFID_VERIFY, 'POST', {
       rfidUid: rfidUid
     });
     
@@ -229,7 +239,7 @@ async function deleteRFID() {
   showLoading('Menghapus RFID...');
   
   try {
-    await apiCall(`${API_BASE_URL}/rfid-face/rfid/${selectedUserId}`, 'DELETE');
+    await apiCall(API_ENDPOINTS.RFID_DELETE(selectedUserId), 'DELETE');
     showNotification('RFID Card berhasil dihapus', 'success');
     document.getElementById('rfidUid').value = '';
     await loadRFIDFaceStatus(selectedUserId);
@@ -298,6 +308,9 @@ function capturePhoto() {
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
   
+  // Flip canvas horizontally (mirror effect)
+  ctx.translate(canvas.width, 0);
+  ctx.scale(-1, 1);
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
   
   const photoDataUrl = canvas.toDataURL('image/jpeg', 0.9);
@@ -311,7 +324,7 @@ function capturePhoto() {
   }
   
   showNotification(`Foto ${capturedPhotos.length} berhasil diambil`, 'success');
-}
+}}
 
 // Display captured photos
 function displayCapturedPhotos() {
@@ -362,9 +375,8 @@ async function saveFaceData() {
   try {
     // Upload each photo
     for (let i = 0; i < capturedPhotos.length; i++) {
-      await apiCall(`${API_BASE_URL}/rfid-face/face/upload/${selectedUserId}`, 'POST', {
-        faceData: capturedPhotos[i],
-        photoUrl: capturedPhotos[i] // In real app, upload to storage first
+      await apiCall(API_ENDPOINTS.FACE_UPLOAD(selectedUserId), 'POST', {
+        photoUrl: capturedPhotos[i] // Base64 data URI
       });
     }
     
@@ -391,7 +403,7 @@ async function deleteFaceData() {
   showLoading('Menghapus data wajah...');
   
   try {
-    await apiCall(`${API_BASE_URL}/rfid-face/face/${selectedUserId}`, 'DELETE');
+    await apiCall(API_ENDPOINTS.FACE_DELETE(selectedUserId), 'DELETE');
     showNotification('Data wajah berhasil dihapus', 'success');
     await loadRFIDFaceStatus(selectedUserId);
   } catch (error) {
@@ -410,4 +422,51 @@ function showLoading(text = 'Memproses...') {
 
 function hideLoading() {
   document.getElementById('loadingOverlay').style.display = 'none';
+}
+
+// Format date
+function formatDate(dateString) {
+  if (!dateString) return '-';
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('id-ID', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } catch (error) {
+    return dateString;
+  }
+}
+
+// Show notification (from auth.js, fallback if not imported)
+if (typeof showNotification === 'undefined') {
+  function showNotification(message, type = 'info') {
+    const existing = document.querySelector('.notification-toast');
+    if (existing) existing.remove();
+    
+    const notification = document.createElement('div');
+    notification.className = `notification-toast notification-${type}`;
+    
+    const icon = {
+      success: 'fa-check-circle',
+      error: 'fa-exclamation-circle',
+      warning: 'fa-exclamation-triangle',
+      info: 'fa-info-circle'
+    }[type] || 'fa-info-circle';
+    
+    notification.innerHTML = `
+      <i class="fas ${icon}"></i>
+      <span>${message}</span>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+      notification.style.animation = 'slideOut 0.3s ease-out';
+      setTimeout(() => notification.remove(), 300);
+    }, 3000);
+  }
 }
