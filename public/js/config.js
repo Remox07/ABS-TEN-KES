@@ -1,8 +1,14 @@
 // API Configuration
-// Netlify Functions - API is on same domain
-const API_BASE_URL = window.location.hostname === 'localhost' 
-  ? 'http://localhost:3000/api'
-  : '/api';  // Same domain - Netlify Functions
+// Cloudflare Pages frontend calls the Cloudflare Worker API
+const API_BASE_URL = (() => {
+  const hostname = window.location.hostname;
+
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return 'http://localhost:3000/api';
+  }
+
+  return 'https://absensi-tenaga-kesehatan-api-production.remoxiya.workers.dev/api';
+})();
 
 // API Endpoints
 const API_ENDPOINTS = {
@@ -17,16 +23,20 @@ const API_ENDPOINTS = {
   
   // Attendance
   ATTENDANCE: `${API_BASE_URL}/attendance`,
+  ALL_ATTENDANCE: `${API_BASE_URL}/attendance`,
   ATTENDANCE_CHECKIN: `${API_BASE_URL}/attendance/check-in`,
   ATTENDANCE_CHECKOUT: `${API_BASE_URL}/attendance/check-out`,
   ATTENDANCE_TODAY: (userId) => `${API_BASE_URL}/attendance/today/${userId}`,
   ATTENDANCE_HISTORY: (userId) => `${API_BASE_URL}/attendance/history/${userId}`,
+  ATTENDANCE_STATS: `${API_BASE_URL}/attendance/stats`,
   
   // Leaves
   LEAVES: `${API_BASE_URL}/leaves`,
+  ALL_LEAVES: `${API_BASE_URL}/leaves`,
   LEAVE_DETAIL: (id) => `${API_BASE_URL}/leaves/${id}`,
   LEAVE_APPROVE: (id) => `${API_BASE_URL}/leaves/${id}/approve`,
   LEAVE_REJECT: (id) => `${API_BASE_URL}/leaves/${id}/reject`,
+  PROCESS_LEAVE: (id) => `${API_BASE_URL}/leaves/${id}/process`,
   
   // Departments
   DEPARTMENTS: `${API_BASE_URL}/departments`,
